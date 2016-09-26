@@ -2,7 +2,6 @@ var fs = require('fs');
 var tv4 = require('tv4');
 var async = require('async');
 var childProcess = require('child_process');
-var path = require('path');
 
 /**
  * Spawn a modified version of visionmedia/deploy
@@ -12,7 +11,7 @@ var path = require('path');
  * @callback cb
  */
 function spawn(hostJSON, args, cb) {
-  var shellSyntaxCommand = "echo '" + hostJSON + "' | \"" + __dirname.replace(/\\/g, '/') + "/deploy\" " + args.join(' ');
+  var shellSyntaxCommand = "echo '" + hostJSON + "' | " + __dirname.replace(/\\/g, '/') + "/deploy " + args.join(' ');
   var proc = childProcess.spawn('sh', ['-c', shellSyntaxCommand], { stdio: 'inherit' });
 
   proc.on('error', function(e) {
@@ -36,21 +35,11 @@ function spawn(hostJSON, args, cb) {
 function deployForEnv(deploy_conf, env, args, cb) {
   if (!deploy_conf[env]) return cb(env + ' not defined in deploy section');
 
-  var piped_data  = JSON.stringify(deploy_conf[env]);
-  var target_conf = JSON.parse(piped_data); //effectively clones the conf
-
-  if(target_conf.ssh_options) {
-    var ssh_opt = '';
-    if(Array.isArray(target_conf.ssh_options)) {
-      ssh_opt = '-o ' + target_conf.ssh_options.join(' -o ');
-    } else {
-      ssh_opt = '-o ' + target_conf.ssh_options;
-    }
-    target_conf.ssh_options = ssh_opt;
-  }
+  var target_conf = deploy_conf[env];
+  var piped_data  = JSON.stringify(target_conf);
 
   if (!tv4.validate(target_conf, {
-    required: ["user", "host", "repo", "path", "ref"]
+    required: ["host", "repo", "path", "ref"]
   })) {
     return cb(tv4.error);
   }
@@ -59,9 +48,8 @@ function deployForEnv(deploy_conf, env, args, cb) {
     console.log('--> Deploying to %s environment', env);
   }
 
-  target_conf.path = path.resolve(target_conf.path);
-
   if (Array.isArray(target_conf.host)) {
+    var conf_copy = JSON.parse(JSON.stringify(target_conf));
     async.series(target_conf.host.reduce(function(jobs, host) {
       jobs.push(function(done) {
 
@@ -69,9 +57,9 @@ function deployForEnv(deploy_conf, env, args, cb) {
           console.log('--> on host %s', host.host ? host.host : host);
         }
 
-        target_conf.host = host;
+        conf_copy.host = host;
 
-        var custom_data = JSON.stringify(target_conf);
+        var custom_data = JSON.stringify(conf_copy);
 
         spawn(custom_data, args, done);
       });
